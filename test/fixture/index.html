@@ -1,0 +1,143 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<title>程序设计2026-09-10第6-8节</title>
+<style>
+  body { margin: 0; font-family: sans-serif; }
+  /* 复刻 icourse 的播放器容器结构（按真实诊断信息） */
+  .cmcPlayer_container { width: 100%; height: 300px; background: #000; }
+  .player-content { width: 100%; height: 100%; }
+  .cmc-base.cmc-video { width: 100%; height: 100%; }
+  video { width: 100%; height: 100%; object-fit: contain; }
+  .sidebar { padding: 10px; }
+  .course-catalogue-wrapper { border: 1px solid #ddd; }
+  .item-wrapper { border-bottom: 1px solid #eee; }
+  .catalogue-item { display: flex; align-items: center; gap: 8px; padding: 8px; cursor: pointer; }
+  .icon-img { width: 12px; height: 12px; background: #ccc; border-radius: 2px; }
+  .icon-img.current-play { background: #2563eb; }
+  .catalogue-time { margin-left: auto; color: #888; }
+  /* 界面噪音：带 active / current 的节点，用来验证章节识别不会被带偏 */
+  .tab-item.active, .opt_btn.active, .tag_opt.active { color: #2563eb; }
+</style>
+</head>
+<body>
+
+<div id="cmcPlayer_container" class="cmcPlayer_container">
+  <div id="cmc_cmcPlayer_container" class="cmc-main cmc-blue">
+    <div class="cmc-base cmc-player">
+      <div class="player-content">
+        <div class="cmc-base cmc-video">
+          <video id="cmc_player_video" width="100%" height="100%" crossorigin="*"
+                 src="/mock-video.mp4" style="object-fit: contain;"></video>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="sidebar">
+  <div class="course-info"><span class="tab-item active">课程名称</span></div>
+
+  <div class="course-catalogue-wrapper">
+    <div class="item-wrapper">
+      <div class="catalogue-item">
+        <div class="icon-img"></div>
+        <span class="catalogue-name">第 1 讲 绪论</span>
+        <span class="catalogue-time">00:00</span>
+      </div>
+    </div>
+    <div class="item-wrapper">
+      <div class="catalogue-item">
+        <div class="icon-img current-play">当前播放</div>
+        <span class="catalogue-name">第 3 讲 树与二叉树</span>
+        <span class="catalogue-time">12:00</span>
+      </div>
+    </div>
+    <div class="item-wrapper">
+      <div class="catalogue-item">
+        <div class="icon-img"></div>
+        <span class="catalogue-name">第 4 讲 图与最短路</span>
+        <span class="catalogue-time">48:00</span>
+      </div>
+    </div>
+  </div>
+
+  <ul class="opr_list"><li class="opt_btn active">叠加字幕</li></ul>
+  <div class="list_tag"><span class="tag_opt active">笔记心得</span></div>
+</div>
+
+<div id="result">pending</div>
+
+<script>
+  // 记录哪个章节行被点了（按索引），验证批量下载切节用的是正确的行
+  var itemClicks = [];
+  Array.prototype.forEach.call(document.querySelectorAll('.catalogue-item'), function (item, i) {
+    item.addEventListener('click', function () { itemClicks.push(i); });
+  });
+
+  function shadowRoot() {
+    var host = document.getElementById('icdl-host');
+    return host && host.shadowRoot;
+  }
+  function el(sel) {
+    var sr = shadowRoot();
+    return sr && sr.querySelector(sel);
+  }
+  function txt(sel) {
+    var e = el(sel);
+    return e ? e.textContent : null;
+  }
+
+  // 一旦看到终态就记下来，后续所有上报都带着它 —— 比"在某个时刻取样"稳得多。
+  // 必须声明在 report() 之前：report('t0') 会立刻读它，var 提升不到赋值。
+  var LAST_TERMINAL = null;
+
+  function report(phase) {
+    var data = {
+      fixtureVersion: 1,
+      panelBuilt: !!shadowRoot(),
+      videoCount: document.querySelectorAll('video').length,
+      src: txt('[data-el="src"]'),
+      kind: txt('[data-el="kind"]'),
+      status: txt('[data-el="status"]'),
+      hint: txt('[data-el="hint"]'),
+      chapterRows: (function () {
+        var l = el('[data-el="list"]');
+        return l ? l.querySelectorAll('.lrow').length : -1;
+      })(),
+      currentMarked: (function () {
+        var l = el('[data-el="list"]');
+        return l ? l.querySelectorAll('.lrow.cur').length : -1;
+      })(),
+      /* 样式有没有真的生效：读注入进 Shadow DOM 的那个 <style> 的长度。
+         少了 web_accessible_resources 时它是空的 —— 面板会变成没样式的原生 HTML。 */
+      panelHasStyles: (function () {
+        var sr = shadowRoot();
+        var st = sr && sr.querySelector('style');
+        return !!(st && st.textContent && st.textContent.length > 500);
+      })(),
+      statusAfterDownload: LAST_TERMINAL,
+      itemClicks: itemClicks.slice()
+    };
+    document.getElementById('result').textContent = 'RESULT[' + phase + ']=' + JSON.stringify(data);
+  }
+
+  // 一旦看到终态就记下来，后续所有上报都带着它
+  function watchStatus() {
+    var s = txt('[data-el="status"]') || '';
+    if (s.indexOf('下载完成') >= 0 || s.indexOf('下载中断') >= 0) LAST_TERMINAL = s;
+  }
+
+  report('t0');
+  setInterval(function () { watchStatus(); report('loop'); }, 200);
+
+  setTimeout(function () { var b = el('[data-act="probe"]'); if (b) b.click(); }, 1500);
+  setTimeout(function () { var b = el('[data-act="scan"]'); if (b) b.click(); }, 2500);
+  setTimeout(function () { var b = el('[data-act="dl"]'); if (b) b.click(); }, 3500);
+</script>
+
+<!-- 拖住 load 事件，让 --dump-dom 等到扩展异步请求落定再转储 -->
+<img src="/hold?ms=14000" width="1" height="1" alt="">
+</body>
+</html>

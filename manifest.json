@@ -1,0 +1,55 @@
+{
+  "manifest_version": 3,
+  "name": "iCourse 回放下载器",
+  "version": "1.0.0",
+  "description": "把复旦大学智慧教学资源平台（icourse.fudan.edu.cn）的课堂回放另存到本地。支持单节下载与按章节批量下载。",
+  "minimum_chrome_version": "116",
+
+  "permissions": [
+    "storage",
+    "downloads",
+    "contextMenus"
+  ],
+
+  "host_permissions": [
+    "https://icourse.fudan.edu.cn/*",
+    "https://*.fudan.edu.cn/*"
+  ],
+
+  "action": {
+    "default_title": "iCourse 回放下载器（点击显示/隐藏下载面板）"
+  },
+
+  "web_accessible_resources": [
+    {
+      "resources": ["src/content/panel.css"],
+      "matches": [
+        "https://icourse.fudan.edu.cn/*",
+        "https://*.fudan.edu.cn/*"
+      ]
+    }
+  ],
+
+  "background": {
+    "service_worker": "src/background.js"
+  },
+
+  "content_scripts": [
+    {
+      "matches": [
+        "https://icourse.fudan.edu.cn/*",
+        "https://*.fudan.edu.cn/*"
+      ],
+      "js": [
+        "src/shared/downloads.js",
+        "src/content/content.js"
+      ],
+      "css": [
+        "src/content/panel.css"
+      ],
+      "run_at": "document_idle",
+      "all_frames": true,
+      "match_origin_as_fallback": true
+    }
+  ]
+}

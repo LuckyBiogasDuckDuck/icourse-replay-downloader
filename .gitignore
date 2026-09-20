@@ -1,0 +1,14 @@
+# 忽略测试与构建产物
+.e2e/
+node_modules/
+
+# 编辑器 / 系统
+.vscode/
+.idea/
+Thumbs.db
+desktop.ini
+
+# 下载下来的视频别误提交（万一有人把下载目录设到这里）
+*.mp4
+*.ts
+*.m3u8

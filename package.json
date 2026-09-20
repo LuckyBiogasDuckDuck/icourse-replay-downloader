@@ -1,0 +1,11 @@
+{
+  "name": "icourse-replay-downloader",
+  "version": "1.0.0",
+  "private": true,
+  "description": "把复旦大学智慧教学资源平台（icourse.fudan.edu.cn）的课堂回放另存到本地的浏览器扩展",
+  "license": "MIT",
+  "scripts": {
+    "test": "node test/downloads.test.js",
+    "e2e": "powershell -NoProfile -ExecutionPolicy Bypass -File test/e2e.ps1"
+  }
+}

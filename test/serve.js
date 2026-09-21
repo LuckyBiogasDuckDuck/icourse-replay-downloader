@@ -64,7 +64,8 @@ const server = http.createServer((req, res) => {
     return;
   }
 
-  if (url === '/mock-video.mp4') {
+  // 两个假视频：第二个用来验证"切节之后下的是新地址，而不是上一节的旧地址"
+  if (url === '/mock-video.mp4' || url === '/mock-video-2.mp4') {
     res.writeHead(200, {
       'Content-Type': 'video/mp4',
       'Content-Length': FAKE_MP4.length,

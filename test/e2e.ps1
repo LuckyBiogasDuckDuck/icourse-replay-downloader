@@ -97,6 +97,10 @@ try {
     # 少了 web_accessible_resources 时注入 Shadow DOM 的 <style> 会是空的，
     # 面板看上去就是一堆没样式的原生 HTML —— 这条专门守它
     '面板样式已生效'        = ($o.panelHasStyles -eq $true)
+    # 换掉视频地址后再下载，提交的必须是**新**地址。
+    # 旧实现用的是面板上缓存的 state.media，这里会重复提交旧地址。
+    '切节后下的是新地址'    = (($o.downloadedUrls -join ',') -like '*mock-video-2.mp4*')
+    '旧地址只下过一次'      = (($o.downloadedUrls | Where-Object { $_ -like '*mock-video.mp4' }).Count -eq 1)
   }
 
   $bad = 0
@@ -111,6 +115,7 @@ try {
   Write-Host ("  实测章节     = {0} 行、高亮 {1} 行" -f $o.chapterRows, $o.currentMarked)
   Write-Host ("  实测下载状态 = {0}" -f $o.statusAfterDownload)
   Write-Host ("  实测样式生效 = {0}" -f $o.panelHasStyles)
+  Write-Host ("  实测下载目标 = {0}" -f (($o.downloadedUrls -join '  |  ')))
   Write-Host ''
   if ($bad) { Write-Host "端到端测试失败 $bad 项" -ForegroundColor Red; exit 1 }
   Write-Host '端到端测试全部通过 ✓' -ForegroundColor Green

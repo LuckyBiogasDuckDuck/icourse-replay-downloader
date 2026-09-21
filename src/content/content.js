@@ -27,10 +27,28 @@
     batchAbort: false,
     /** 章节清单 [{ row, name, isCurrent, i, state }] */
     chapters: [],
-    panelHidden: false
+    panelHidden: false,
+    /** 提交过的下载记录 [{url, filename}]，最多留 20 条 */
+    log: []
   };
 
+  /** 记录一次提交（面板上有个隐藏节点会把它吐出来，便于自动化测试断言） */
+  function logDownload(url, filename) {
+    state.log.push({ url, filename });
+    if (state.log.length > 20) state.log.shift();
+    renderLog();
+  }
+
+  function renderLog() {
+    if (!ui.logEl) return;
+    // 形式是 JSON，但把 < > 转义掉，免得内容里的尖括号破坏 DOM
+    ui.logEl.textContent = JSON.stringify(state.log).replace(/</g, '\\u003c').replace(/>/g, '\\u003e');
+  }
+
   let ui = {};
+
+  /** 批量下载时，连续这么多节拿不到媒体地址就停下（防止章节选择器猜错后长时间空转） */
+  const MISS_LIMIT = 3;
 
   /* ============================================================ 小工具 */
 
@@ -57,7 +75,13 @@
   function pickVideo() {
     const list = $$('video').filter((v) => v.readyState !== undefined);
     if (!list.length) return null;
-    // 多个 video 时挑最"像正片"的：时长最长的那个
+
+    // 优先认这个站点播放器的视频元素（README 里记录的实测 id）。
+    // 页面以后可能加广告/预览/试看之类的小视频，光靠"时长最长"会挑错。
+    const known = list.find((v) => v.id === 'cmc_player_video');
+    if (known) return known;
+
+    // 认不到就退回启发式：时长最长的那个最像正片
     return list.reduce((best, v) => {
       const d = isFinite(v.duration) ? v.duration : 0;
       const bd = best && isFinite(best.duration) ? best.duration : 0;
@@ -199,6 +223,8 @@
             下载交给浏览器下载器完成，可在 <b>chrome://downloads</b> 看进度、暂停、续传。
             <b>不会</b>伪造观看进度，也不处理加密内容。
           </div>
+          <!-- 提交过的下载记录（JSON）。不显示，只给自动化测试读 -->
+          <span data-el="log" style="display:none"></span>
         </div>
       </div>
     `;
@@ -215,6 +241,7 @@
       prog: shadow.querySelector('.prog'),
       hint: shadow.querySelector('[data-el="hint"]'),
       list: shadow.querySelector('[data-el="list"]'),
+      logEl: shadow.querySelector('[data-el="log"]'),
       wait: shadow.querySelector('[data-opt="wait"]')
     };
 
@@ -395,7 +422,11 @@
       return false;
     }
 
-    const m = state.media || probeMedia();
+    // 永远实时探测，不用缓存值。
+    // state.media 只在 refresh() 时更新，切节后它会是**上一节**的地址 ——
+    // 用它会把上一节重复下一遍。
+    const m = probeMedia();
+    state.media = m.url ? { url: m.url, kind: m.kind } : null;
     if (!m || !m.url) {
       setStatus('err', (m && m.why) || '没有可下载的媒体地址');
       return false;
@@ -423,6 +454,7 @@
       setStatus('work', '已交给浏览器下载：' + filename);
       const downloadId = await dlStart(url, filename);
       state.active = { downloadId, resolve: null, name: filename };
+      logDownload(url, filename);
 
       if (isBlob) setTimeout(() => { try { URL.revokeObjectURL(url); } catch (e) {} }, 60000);
       return true;
@@ -507,6 +539,10 @@
     const waitSec = Math.max(3, Number(ui.wait && ui.wait.value) || 12);
     let done = 0;
     let failed = 0;
+    // 连续拿不到地址的节数。章节选择器是猜的，一旦猜错了页面上别的列表，
+    // 后面每一节都会白等一个 waitSec —— 没有熔断就会空转好几分钟。
+    let consecutiveMiss = 0;
+    let tripped = false;
 
     try {
       for (const ch of state.chapters) {
@@ -526,9 +562,15 @@
         if (!m || !m.url) {
           ch.state = 'fail';
           failed++;
+          consecutiveMiss++;
           renderList();
+          if (consecutiveMiss >= MISS_LIMIT) {
+            tripped = true;
+            break;
+          }
           continue;
         }
+        consecutiveMiss = 0;
 
         const ok = await downloadCurrent(ch.name);
         if (ok) {
@@ -545,10 +587,25 @@
       state.batchRunning = false;
       renderList();
       setBar(0, false);
-      setStatus(
-        failed ? 'warn' : 'ok',
-        `批量结束${state.batchAbort ? '（已取消）' : ''}：成功 ${done}，失败 ${failed}`
-      );
+
+      let msg = `批量结束${state.batchAbort ? '（已取消）' : ''}：成功 ${done}，失败 ${failed}`;
+      let level = failed ? 'warn' : 'ok';
+
+      if (tripped) {
+        // 连续失败到熔断：多半是章节选择器猜错了页面上别的列表，
+        // 或者这些节的播放器结构不一样 —— 两种情况都该明确告诉用户
+        level = 'err';
+        msg += `；连续 ${MISS_LIMIT} 节都拿不到播放地址，已提前停下`;
+        if (ui.hint) {
+          ui.hint.textContent =
+            '可能原因：扫到的「章节」其实是页面上别的列表（先看面板里列出的章节名对不对）；' +
+            '或这些节需要先点开才能加载；或网络太慢，把「每节加载等待」调大再试。';
+        }
+      } else if (done === 0 && failed > 0) {
+        msg += '；一节都没成功，建议先点「复制诊断信息」排查';
+      }
+
+      setStatus(level, msg);
     }
   }
 

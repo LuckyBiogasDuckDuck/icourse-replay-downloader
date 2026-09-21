@@ -118,6 +118,8 @@
         return !!(st && st.textContent && st.textContent.length > 500);
       })(),
       statusAfterDownload: LAST_TERMINAL,
+      /* 扩展实际提交过的下载地址，用来验证"切节后下的是新地址" */
+      downloadedUrls: downloadedUrls(),
       itemClicks: itemClicks.slice()
     };
     document.getElementById('result').textContent = 'RESULT[' + phase + ']=' + JSON.stringify(data);
@@ -129,15 +131,43 @@
     if (s.indexOf('下载完成') >= 0 || s.indexOf('下载中断') >= 0) LAST_TERMINAL = s;
   }
 
+  /* 提交过的下载记录 —— 从面板 Shadow DOM 里那个隐藏节点读。
+     注意：普通网页访问不到 chrome.storage / chrome.runtime（实测是 undefined），
+     所以只能走面板这个通道，别想着从页面直接问扩展要数据。 */
+  function downloadedUrls() {
+    var e = el('[data-el="log"]');
+    if (!e || !e.textContent) return [];
+    try {
+      return (JSON.parse(e.textContent) || []).map(function (x) { return x.url; });
+    } catch (err) {
+      return [];
+    }
+  }
+
   report('t0');
   setInterval(function () { watchStatus(); report('loop'); }, 200);
 
   setTimeout(function () { var b = el('[data-act="probe"]'); if (b) b.click(); }, 1500);
   setTimeout(function () { var b = el('[data-act="scan"]'); if (b) b.click(); }, 2500);
+
+  // 3.5s：下载第一版地址
   setTimeout(function () { var b = el('[data-act="dl"]'); if (b) b.click(); }, 3500);
+
+  // 8s：换视频地址（模拟"切到下一节"）。
+  // 面板上缓存的地址仍然是旧的 —— 若下载逻辑用了缓存，第二次下载提交的会是旧地址。
+  setTimeout(function () {
+    var v = document.getElementById('cmc_player_video');
+    if (v) {
+      v.src = '/mock-video-2.mp4';
+      v.load();
+    }
+  }, 8000);
+
+  // 11s：再下第二次。正确行为 = 提交的是新地址
+  setTimeout(function () { var b = el('[data-act="dl"]'); if (b) b.click(); }, 11000);
 </script>
 
 <!-- 拖住 load 事件，让 --dump-dom 等到扩展异步请求落定再转储 -->
-<img src="/hold?ms=14000" width="1" height="1" alt="">
+<img src="/hold?ms=18000" width="1" height="1" alt="">
 </body>
 </html>

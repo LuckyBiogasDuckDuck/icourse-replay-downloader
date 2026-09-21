@@ -28,7 +28,6 @@ async function startDownload(msg) {
     // 重名时自动加序号，不覆盖已有文件
     conflictAction: 'uniquify'
   });
-  console.log('[回放下载器] 已提交下载 id=' + downloadId + ' -> ' + filename);
   return downloadId;
 }
 
